@@ -29,7 +29,7 @@ int main(int argc, char **argv){
     read_history(histfile);
 
     int ret;
-    char hostname[128];
+    char *hostname[128];
     char *osname = "AlgoOS";
     char *prompt[512];
     char *username;
