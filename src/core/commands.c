@@ -24,18 +24,39 @@ static int cmd_accessctrl_web(char **args);
 static int cmd_accessctrl_web_enable(char **args);
 static int cmd_accessctrl_web_disable(char **args);
 
-/* Stub commands (not yet implemented) */
+/* Commands with subcommands */
 static int cmd_fs(char **args);
+static int cmd_fs_quota(char **args);
+static int cmd_fs_quota_enable(char **args);
+static int cmd_fs_quota_disable(char **args);
+static int cmd_fs_quota_status(char **args);
+
 static int cmd_nfs(char **args);
-static int cmd_cifs(char **args);
+static int cmd_nfs_enable(char **args);
+static int cmd_nfs_disable(char **args);
+static int cmd_nfs_share(char **args);
+static int cmd_nfs_unshare(char **args);
+static int cmd_nfs_list(char **args);
+
 static int cmd_system(char **args);
+static int cmd_system_reboot(char **args);
+static int cmd_system_shutdown(char **args);
+static int cmd_system_set(char **args);
+static int cmd_system_set_motd(char **args);
+
+static int cmd_log(char **args);
+static int cmd_log_list(char **args);
+static int cmd_log_view(char **args);
+static int cmd_log_watch(char **args);
+
+/* Stub commands (not yet implemented) */
+static int cmd_cifs(char **args);
 static int cmd_snapshot(char **args);
 static int cmd_repl(char **args);
 static int cmd_disk(char **args);
 static int cmd_vtl(char **args);
 static int cmd_net(char **args);
 static int cmd_user(char **args);
-static int cmd_log(char **args);
 static int cmd_config(char **args);
 static int cmd_syshealth(char **args);
 
@@ -98,6 +119,52 @@ static command_t accessctrl_commands[] = {
     NULL_COMMAND
 };
 
+/* Filesystem quota commands */
+static command_t fs_quota_commands[] = {
+    {"enable",  cmd_fs_quota_enable,  NULL, "Enable filesystem quota"},
+    {"disable", cmd_fs_quota_disable, NULL, "Disable filesystem quota"},
+    {"status",  cmd_fs_quota_status,  NULL, "Check filesystem quota status"},
+    NULL_COMMAND
+};
+
+/* Filesystem commands */
+static command_t fs_commands[] = {
+    {"quota", cmd_fs_quota, fs_quota_commands, "Filesystem quota operations"},
+    NULL_COMMAND
+};
+
+/* NFS commands */
+static command_t nfs_commands[] = {
+    {"enable",  cmd_nfs_enable,  NULL, "Enable NFS sharing protocol"},
+    {"disable", cmd_nfs_disable, NULL, "Disable NFS sharing protocol"},
+    {"share",   cmd_nfs_share,   NULL, "NFS share a backup point"},
+    {"unshare", cmd_nfs_unshare, NULL, "NFS unshare a backup point"},
+    {"list",    cmd_nfs_list,    NULL, "List configured shares"},
+    NULL_COMMAND
+};
+
+/* System set commands */
+static command_t system_set_commands[] = {
+    {"motd", cmd_system_set_motd, NULL, "System message of the day"},
+    NULL_COMMAND
+};
+
+/* System commands */
+static command_t system_commands[] = {
+    {"reboot",   cmd_system_reboot,   NULL, "System reboot"},
+    {"shutdown", cmd_system_shutdown, NULL, "System shutdown"},
+    {"set",      cmd_system_set,      system_set_commands, "Set system parameter"},
+    NULL_COMMAND
+};
+
+/* Log commands */
+static command_t log_commands[] = {
+    {"list",  cmd_log_list,  NULL, "Log files list"},
+    {"view",  cmd_log_view,  NULL, "View log file"},
+    {"watch", cmd_log_watch, NULL, "Monitor log file"},
+    NULL_COMMAND
+};
+
 /* Main command array */
 command_t commands[] = {
     {"accessctrl", cmd_accessctrl, accessctrl_commands, "Manage administrative access control"},
@@ -105,14 +172,14 @@ command_t commands[] = {
     {"cifs",       cmd_cifs,       NULL,                "CIFS sharing operations"},
     {"config",     cmd_config,     NULL,                "Configure system parameters"},
     {"disk",       cmd_disk,       NULL,                "Manage disk hardware operations"},
-    {"fs",         cmd_fs,         NULL,                "Filesystem management"},
-    {"log",        cmd_log,        NULL,                "Logging information"},
+    {"fs",         cmd_fs,         fs_commands,         "Filesystem management"},
+    {"log",        cmd_log,        log_commands,        "Logging information"},
     {"net",        cmd_net,        NULL,                "Network administration"},
-    {"nfs",        cmd_nfs,        NULL,                "NFS sharing operations"},
+    {"nfs",        cmd_nfs,        nfs_commands,        "NFS sharing operations"},
     {"repl",       cmd_repl,       NULL,                "Manage replication operations"},
     {"snapshot",   cmd_snapshot,   NULL,                "Data snapshot operations"},
     {"syshealth",  cmd_syshealth,  NULL,                "System health administration and reporting"},
-    {"system",     cmd_system,     NULL,                "System operations"},
+    {"system",     cmd_system,     system_commands,     "System operations"},
     {"user",       cmd_user,       NULL,                "User management"},
     {"vtl",        cmd_vtl,        NULL,                "Virtual tape library management"},
     {"help",       cmd_help,       NULL,                "Display help"},
@@ -268,29 +335,147 @@ static int cmd_accessctrl_web_disable(char **args) {
     return access_control_web_disable();
 }
 
-/* Stub command implementations (not yet implemented) */
+/* Filesystem command implementations */
 
 static int cmd_fs(char **args) {
     (void)args;
-    printf("Filesystem management - Not yet implemented\n");
+    print_command_help("fs");
     return SUCCESS;
 }
 
-static int cmd_nfs(char **args) {
+static int cmd_fs_quota(char **args) {
     (void)args;
-    printf("NFS sharing - Not yet implemented\n");
+    print_command_help("fs quota");
     return SUCCESS;
 }
+
+static int cmd_fs_quota_enable(char **args) {
+    (void)args;
+    printf("Filesystem quota enable - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_fs_quota_disable(char **args) {
+    (void)args;
+    printf("Filesystem quota disable - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_fs_quota_status(char **args) {
+    (void)args;
+    printf("Filesystem quota status - Not yet implemented\n");
+    return SUCCESS;
+}
+
+/* NFS command implementations */
+
+static int cmd_nfs(char **args) {
+    (void)args;
+    print_command_help("nfs");
+    return SUCCESS;
+}
+
+static int cmd_nfs_enable(char **args) {
+    (void)args;
+    printf("NFS enable - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_nfs_disable(char **args) {
+    (void)args;
+    printf("NFS disable - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_nfs_share(char **args) {
+    (void)args;
+    printf("NFS share - Not yet implemented\n");
+    printf("Usage: nfs share <backup_point> <host> <options>\n");
+    return SUCCESS;
+}
+
+static int cmd_nfs_unshare(char **args) {
+    (void)args;
+    printf("NFS unshare - Not yet implemented\n");
+    printf("Usage: nfs unshare <backup_point> <host>\n");
+    return SUCCESS;
+}
+
+static int cmd_nfs_list(char **args) {
+    (void)args;
+    printf("NFS list - Not yet implemented\n");
+    return SUCCESS;
+}
+
+/* System command implementations */
+
+static int cmd_system(char **args) {
+    (void)args;
+    print_command_help("system");
+    return SUCCESS;
+}
+
+static int cmd_system_reboot(char **args) {
+    (void)args;
+    printf("System reboot - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_system_shutdown(char **args) {
+    (void)args;
+    printf("System shutdown - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_system_set(char **args) {
+    (void)args;
+    print_command_help("system set");
+    return SUCCESS;
+}
+
+static int cmd_system_set_motd(char **args) {
+    (void)args;
+    printf("System set MOTD - Not yet implemented\n");
+    return SUCCESS;
+}
+
+/* Log command implementations */
+
+static int cmd_log(char **args) {
+    (void)args;
+    print_command_help("log");
+    return SUCCESS;
+}
+
+static int cmd_log_list(char **args) {
+    (void)args;
+    printf("Log list - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_log_view(char **args) {
+    if (!args[0]) {
+        fprintf(stderr, "Usage: log view <filename>\n");
+        return ERROR_INVALID_ARGS;
+    }
+    printf("Log view '%s' - Not yet implemented\n", args[0]);
+    return SUCCESS;
+}
+
+static int cmd_log_watch(char **args) {
+    if (!args[0]) {
+        fprintf(stderr, "Usage: log watch <filename>\n");
+        return ERROR_INVALID_ARGS;
+    }
+    printf("Log watch '%s' - Not yet implemented\n", args[0]);
+    return SUCCESS;
+}
+
+/* Stub command implementations (not yet implemented) */
 
 static int cmd_cifs(char **args) {
     (void)args;
     printf("CIFS sharing - Not yet implemented\n");
-    return SUCCESS;
-}
-
-static int cmd_system(char **args) {
-    (void)args;
-    printf("System operations - Not yet implemented\n");
     return SUCCESS;
 }
 
@@ -327,12 +512,6 @@ static int cmd_net(char **args) {
 static int cmd_user(char **args) {
     (void)args;
     printf("User management - Not yet implemented\n");
-    return SUCCESS;
-}
-
-static int cmd_log(char **args) {
-    (void)args;
-    printf("Logging - Not yet implemented\n");
     return SUCCESS;
 }
 
