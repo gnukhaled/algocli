@@ -1,0 +1,191 @@
+name: Security Scan and Build
+
+on:
+  push:
+    branches: [ main, develop, claude/* ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run security scans weekly
+    - cron: '0 0 * * 0'
+
+jobs:
+  security-scan:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libreadline-dev \
+          libpam-dev \
+          libsqlite3-dev \
+          libsmartcols-dev \
+          cppcheck \
+          clang-tools \
+          flawfinder
+
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all \
+                 --inconclusive \
+                 --std=c99 \
+                 --error-exitcode=1 \
+                 --suppress=missingIncludeSystem \
+                 src/ include/
+
+    - name: Run flawfinder
+      run: |
+        flawfinder --error-level=4 src/ include/
+
+    - name: Check for dangerous functions
+      run: |
+        echo "Checking for dangerous function usage..."
+        ! grep -r "strcpy\|strcat\|sprintf\|gets\|system\|popen" src/ include/ || {
+          echo "ERROR: Found dangerous functions!"
+          echo "Use safe alternatives: strncpy, strncat, snprintf, safe_exec"
+          exit 1
+        }
+
+    - name: Check for setuid calls
+      run: |
+        echo "Checking for setuid/setgid calls..."
+        ! grep -r "setuid\|setgid" src/ || {
+          echo "ERROR: Found setuid/setgid calls!"
+          echo "This is a security risk. Use sudo/capabilities instead."
+          exit 1
+        }
+
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    needs: security-scan
+
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [debug, release]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libreadline-dev \
+          libpam-dev \
+          libsqlite3-dev \
+          libsmartcols-dev \
+          valgrind
+
+    - name: Build (Debug)
+      if: matrix.build_type == 'debug'
+      run: |
+        make -f Makefile.new CC=${{ matrix.compiler }} \
+          CFLAGS="-std=c99 -Wall -Wextra -Werror -g -O0 -fsanitize=address -fsanitize=undefined"
+
+    - name: Build (Release)
+      if: matrix.build_type == 'release'
+      run: |
+        make -f Makefile.new CC=${{ matrix.compiler }}
+
+    - name: Run unit tests
+      run: |
+        # TODO: Implement unit tests
+        echo "Unit tests not yet implemented"
+
+    - name: Run integration tests
+      run: |
+        # TODO: Implement integration tests
+        echo "Integration tests not yet implemented"
+
+    - name: Check for memory leaks (valgrind)
+      if: matrix.build_type == 'debug' && matrix.compiler == 'gcc'
+      run: |
+        # TODO: Add valgrind tests when tests are implemented
+        echo "Memory leak testing not yet implemented"
+
+  sast-analysis:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: cpp
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libreadline-dev \
+          libpam-dev \
+          libsqlite3-dev \
+          libsmartcols-dev
+
+    - name: Build for CodeQL
+      run: |
+        make -f Makefile.new
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Check for vulnerable dependencies
+      run: |
+        echo "Checking system dependencies..."
+        # Check SQLite version
+        sqlite3 --version
+        # Check readline version
+        dpkg -l | grep libreadline || true
+        # Note: Add specific version checks if known vulnerabilities exist
+
+  compliance-check:
+    name: Security Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Check SUID bits
+      run: |
+        echo "Checking for SUID bits in repository..."
+        ! find . -perm /4000 -type f || {
+          echo "ERROR: Found files with SUID bit set!"
+          exit 1
+        }
+
+    - name: Check for secrets
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: ${{ github.event.repository.default_branch }}
+        head: HEAD
+
+    - name: Security policy check
+      run: |
+        if [ ! -f SECURITY.md ]; then
+          echo "WARNING: No SECURITY.md file found"
+          echo "Consider adding a security policy"
+        fi
