@@ -35,6 +35,8 @@ LDFLAGS = $(CFLAGS_SECURITY)
 # Source files (new refactored version)
 CORE_SRCS = src/core/config.c \
             src/core/safe_exec.c \
+            src/core/command_dispatcher.c \
+            src/core/commands.c \
             src/core/main_new.c
 
 DB_SRCS = src/database/registry_new.c

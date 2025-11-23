@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include "../../include/core/config.h"
 #include "../../include/core/safe_exec.h"
+#include "../../include/core/command_dispatcher.h"
 #include "../../include/database/registry_new.h"
 
 /* SECURITY NOTE: This version does NOT use setuid(0) */
@@ -50,31 +51,7 @@ static char* build_prompt(void) {
     return prompt;
 }
 
-/* Strip leading and trailing whitespace */
-static char* stripwhite(char *string) {
-    char *s, *t;
-
-    for (s = string; isspace(*s); s++)
-        ;
-
-    if (*s == '\0')
-        return s;
-
-    t = s + strlen(s) - 1;
-    while (t > s && isspace(*t))
-        t--;
-
-    *++t = '\0';
-
-    return s;
-}
-
-/* Execute command (stub - would call command dispatcher) */
-static int execute_command(char *line) {
-    /* TODO: Call actual command dispatcher */
-    printf("Command: %s\n", line);
-    return SUCCESS;
-}
+/* Note: strip_whitespace is provided by command_dispatcher module */
 
 /* Main function */
 int main(int argc, char **argv) {
@@ -133,25 +110,23 @@ int main(int argc, char **argv) {
     /* Build prompt */
     char *prompt = build_prompt();
 
-    /* Setup readline */
-    rl_bind_key('\t', rl_complete);
+    /* Setup readline with command completion */
+    initialize_readline(APP_NAME);
 
     /* Main loop with SIGINT handling */
     while (sigsetjmp(ctrlc_buf, 1) != 0)
         ;
 
     while ((line = readline(prompt)) != NULL) {
-        rl_bind_key('\t', rl_complete);
-
         if (!line)
             break;
 
-        stripped = stripwhite(line);
+        stripped = strip_whitespace(line);
 
         if (*stripped) {
             add_history(stripped);
             write_history(history_file);
-            execute_command(stripped);
+            dispatch_command(stripped);
         }
 
         free(line);
