@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <signal.h>
 #include <setjmp.h>
 #include <readline/readline.h>
@@ -9,6 +11,8 @@
 #include <pwd.h>
 #include <sys/types.h>
 #include "../../include/core/config.h"
+#include "../../include/core/safe_exec.h"
+#include "../../include/database/registry_new.h"
 
 /* SECURITY NOTE: This version does NOT use setuid(0) */
 /* Run this with proper sudo/capabilities instead */
@@ -74,6 +78,9 @@ static int execute_command(char *line) {
 
 /* Main function */
 int main(int argc, char **argv) {
+    (void)argc; /* Unused parameter */
+    (void)argv; /* Unused parameter */
+
     char *line;
     char *stripped;
     char history_file[MAX_PATH_LENGTH];

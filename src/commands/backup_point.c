@@ -259,6 +259,10 @@ int backup_point_set_quota(const char *name, const char *limit) {
 
 /* List callback for displaying backup points */
 static int list_callback(void *data, int argc, char **argv, char **col_names) {
+    (void)data;      /* Unused parameter */
+    (void)argc;      /* Unused parameter */
+    (void)col_names; /* Unused parameter */
+
     /* argv[0] = name, argv[1] = createdon, argv[2] = quota */
     printf("%-20s  %-20s  %-10s\n",
            argv[0] ? argv[0] : "",

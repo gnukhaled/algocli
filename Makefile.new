@@ -26,14 +26,16 @@ CFLAGS_SECURITY = -Wl,-z,relro,-z,now -pie
 INCLUDES = -Iinclude/core -Iinclude/database -Iinclude/commands -Iinclude/logging
 
 # Libraries
-LIBS = -lreadline -lpam -lpam_misc -lsqlite3 -lsmartcols
+# Note: PAM and smartcols removed for now (not used in refactored core)
+LIBS = -lreadline -lsqlite3
 
 # Linker flags
 LDFLAGS = $(CFLAGS_SECURITY)
 
 # Source files (new refactored version)
 CORE_SRCS = src/core/config.c \
-            src/core/safe_exec.c
+            src/core/safe_exec.c \
+            src/core/main_new.c
 
 DB_SRCS = src/database/registry_new.c
 

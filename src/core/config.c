@@ -36,6 +36,7 @@ int config_init(void) {
 
 /* Load configuration from file (stub for now) */
 int config_load(const char *config_file) {
+    (void)config_file; /* Unused parameter - TODO: Implement file parsing */
     /* TODO: Implement configuration file parsing */
     /* For now, just use defaults */
     config_set_defaults();

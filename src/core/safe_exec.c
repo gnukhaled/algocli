@@ -122,8 +122,7 @@ char* safe_strdup(const char *str) {
         return NULL;
     }
 
-    strncpy(dup, str, len);
-    dup[len] = '\0';
+    memcpy(dup, str, len + 1); /* Copy including null terminator */
 
     return dup;
 }

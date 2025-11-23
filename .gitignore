@@ -1,0 +1,50 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+algocli
+algocli-new
+algocli-old
+
+# Dependencies
+.depend
+
+# Editor files
+*~
+.*.swp
+.*.swo
+*.bak
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+test_results/
+*.test
+*.gcda
+*.gcno
+*.gcov
+
+# Database files (local testing)
+*.db
+*.sqlite
+*.sqlite3
+
+# Log files
+*.log
+
+# Temporary files
+/tmp/

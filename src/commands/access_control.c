@@ -222,6 +222,10 @@ int access_control_ssh_delete_allowed_host(const char *host) {
 /* List callback for displaying allowed hosts */
 static int list_hosts_callback(void *data, int argc, char **argv,
                                char **col_names) {
+    (void)data;      /* Unused parameter */
+    (void)argc;      /* Unused parameter */
+    (void)col_names; /* Unused parameter */
+
     printf("  %s\n", argv[0] ? argv[0] : "");
     return 0;
 }
