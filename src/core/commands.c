@@ -24,6 +24,21 @@ static int cmd_accessctrl_web(char **args);
 static int cmd_accessctrl_web_enable(char **args);
 static int cmd_accessctrl_web_disable(char **args);
 
+/* Stub commands (not yet implemented) */
+static int cmd_fs(char **args);
+static int cmd_nfs(char **args);
+static int cmd_cifs(char **args);
+static int cmd_system(char **args);
+static int cmd_snapshot(char **args);
+static int cmd_repl(char **args);
+static int cmd_disk(char **args);
+static int cmd_vtl(char **args);
+static int cmd_net(char **args);
+static int cmd_user(char **args);
+static int cmd_log(char **args);
+static int cmd_config(char **args);
+static int cmd_syshealth(char **args);
+
 /* External command implementations */
 extern int backup_point_create(const char *name);
 extern int backup_point_delete(const char *name);
@@ -85,9 +100,23 @@ static command_t accessctrl_commands[] = {
 
 /* Main command array */
 command_t commands[] = {
+    {"accessctrl", cmd_accessctrl, accessctrl_commands, "Manage administrative access control"},
     {"bp",         cmd_bp,         bp_commands,         "Backup point management"},
-    {"accessctrl", cmd_accessctrl, accessctrl_commands, "Access control management"},
+    {"cifs",       cmd_cifs,       NULL,                "CIFS sharing operations"},
+    {"config",     cmd_config,     NULL,                "Configure system parameters"},
+    {"disk",       cmd_disk,       NULL,                "Manage disk hardware operations"},
+    {"fs",         cmd_fs,         NULL,                "Filesystem management"},
+    {"log",        cmd_log,        NULL,                "Logging information"},
+    {"net",        cmd_net,        NULL,                "Network administration"},
+    {"nfs",        cmd_nfs,        NULL,                "NFS sharing operations"},
+    {"repl",       cmd_repl,       NULL,                "Manage replication operations"},
+    {"snapshot",   cmd_snapshot,   NULL,                "Data snapshot operations"},
+    {"syshealth",  cmd_syshealth,  NULL,                "System health administration and reporting"},
+    {"system",     cmd_system,     NULL,                "System operations"},
+    {"user",       cmd_user,       NULL,                "User management"},
+    {"vtl",        cmd_vtl,        NULL,                "Virtual tape library management"},
     {"help",       cmd_help,       NULL,                "Display help"},
+    {"?",          cmd_help,       NULL,                "Synonym for help"},
     {"exit",       cmd_exit,       NULL,                "Exit the program"},
     {"quit",       cmd_exit,       NULL,                "Exit the program"},
     NULL_COMMAND
@@ -237,4 +266,84 @@ static int cmd_accessctrl_web_enable(char **args) {
 static int cmd_accessctrl_web_disable(char **args) {
     (void)args;
     return access_control_web_disable();
+}
+
+/* Stub command implementations (not yet implemented) */
+
+static int cmd_fs(char **args) {
+    (void)args;
+    printf("Filesystem management - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_nfs(char **args) {
+    (void)args;
+    printf("NFS sharing - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_cifs(char **args) {
+    (void)args;
+    printf("CIFS sharing - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_system(char **args) {
+    (void)args;
+    printf("System operations - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_snapshot(char **args) {
+    (void)args;
+    printf("Snapshot operations - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_repl(char **args) {
+    (void)args;
+    printf("Replication management - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_disk(char **args) {
+    (void)args;
+    printf("Disk management - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_vtl(char **args) {
+    (void)args;
+    printf("Virtual tape library - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_net(char **args) {
+    (void)args;
+    printf("Network administration - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_user(char **args) {
+    (void)args;
+    printf("User management - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_log(char **args) {
+    (void)args;
+    printf("Logging - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_config(char **args) {
+    (void)args;
+    printf("System configuration - Not yet implemented\n");
+    return SUCCESS;
+}
+
+static int cmd_syshealth(char **args) {
+    (void)args;
+    printf("System health - Not yet implemented\n");
+    return SUCCESS;
 }
