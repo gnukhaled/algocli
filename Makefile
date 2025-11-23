@@ -1,85 +1,220 @@
-# Makefile to build the cli interface for 
-# the AlgoBackup project
+# AlgoBackup CLI - Modernized Makefile
+# Refactored version with security best practices
 
-# the compiler: gcc for C program
+# Project information
+PROJECT = algocli
+VERSION = 0.2.0
+PREFIX ?= /usr/local
+BINDIR = $(PREFIX)/bin
+SYSCONFDIR = /etc/algobackup
+DATADIR = $(PREFIX)/share/algobackup
+LOGDIR = /var/log/algobackup
+DBDIR = /var/lib/algobackup
+
+# Compiler and flags
 CC = gcc
+CFLAGS = -std=c99 -Wall -Wextra -Werror -Wpedantic \
+         -Wformat=2 -Wformat-security -Werror=format-security \
+         -fstack-protector-strong -fPIE \
+         -D_FORTIFY_SOURCE=2 \
+         -O2 -g
 
-# Compiler flags:
-#  -g    adds debugging information to the executable file
-#  -Wall turns on most, but not all, compiler warnings
-#  -fstack-protector-all turns on gcc stack protection 
-#  -lreadline invokes libreadline
-CFLAGS  = -g -O2 -Wall -fstack-protector-all -lreadline -lpam -lpam_misc -lsqlite3 -lsmartcols
-CFLAGS_OBJS = -g -c
-# The build target executable:
+# Additional security flags
+CFLAGS_SECURITY = -Wl,-z,relro,-z,now -pie
 
-TARGET = algocli
-OBJECTS = main.o algocli.o algo-log.o registry.o\
-	  cmd-system.o cmd-fs.o cmd-bp.o \
-	  cmd-accessctrl.o cmd-log.o cmd-nfs.o\
-	  cmd-net.o cmd-user.o cmd-snapshot.o\
-	  cmd-repl.o cmd-config.o cmd-cifs.o\
-	  cmd-disk.o cmd-syshealth.o 
+# Include directories
+INCLUDES = -Iinclude/core -Iinclude/database -Iinclude/commands -Iinclude/logging
 
-all: $(TARGET)
+# Libraries
+# Note: PAM and smartcols removed for now (not used in refactored core)
+LIBS = -lreadline -lsqlite3
 
-$(TARGET): $(OBJECTS) 
-	$(CC) $(CFLAGS) $(OBJECTS) -o $(TARGET)
+# Linker flags
+LDFLAGS = $(CFLAGS_SECURITY)
 
-main.o: main.c
-	$(CC) $(CFLAGS_OBJS) main.c
+# Source files (new refactored version)
+CORE_SRCS = src/core/config.c \
+            src/core/safe_exec.c \
+            src/core/command_dispatcher.c \
+            src/core/commands.c \
+            src/core/main_new.c
 
-algocli.o: algocli.c
-	$(CC) $(CFLAGS_OBJS) algocli.c
+DB_SRCS = src/database/registry_new.c
 
-algo-log.o: algo-log.c
-	$(CC) $(CFLAGS_OBJS) algo-log.c
+CMD_SRCS = src/commands/backup_point.c \
+           src/commands/access_control.c
 
-registry.o: registry.c
-	$(CC) $(CFLAGS_OBJS) registry.c
+# All source files
+SRCS_NEW = $(CORE_SRCS) $(DB_SRCS) $(CMD_SRCS)
 
-cmd-fs.o: cmd-fs.c
-	$(CC) $(CFLAGS_OBJS) cmd-fs.c
+# Object files (new)
+OBJS_NEW = $(SRCS_NEW:.c=.o)
 
-cmd-log.o: cmd-log.c
-	$(CC) $(CFLAGS_OBJS) cmd-log.c
+# Old source files (original codebase)
+SRCS_OLD = main.c algocli.c registry.c algo-log.c \
+           cmd-bp.c cmd-accessctrl.c cmd-fs.c cmd-log.c \
+           cmd-nfs.c cmd-system.c
 
-cmd-bp.o: cmd-bp.c
-	$(CC) $(CFLAGS_OBJS) cmd-bp.c
+# Object files (old)
+OBJS_OLD = $(SRCS_OLD:.c=.o)
 
-cmd-nfs.o: cmd-nfs.c
-	$(CC) $(CFLAGS_OBJS) cmd-nfs.c
+# Build targets
+.PHONY: all clean install uninstall test scan help old new
 
-cmd-system.o: cmd-system.c
-	$(CC) $(CFLAGS_OBJS) cmd-system.c
+# Default target builds new version
+all: new
 
-cmd-accessctrl.o: cmd-accessctrl.c
-	$(CC) $(CFLAGS_OBJS) cmd-accessctrl.c
+# Build new (refactored) version
+new: $(PROJECT)-new
 
-cmd-cifs.o: cmd-cifs.c
-	$(CC) $(CFLAGS_OBJS) cmd-cifs.c
+$(PROJECT)-new: $(OBJS_NEW)
+	@echo "Linking $(PROJECT)-new..."
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	@echo "Build complete: $(PROJECT)-new"
+	@echo ""
+	@echo "⚠️  SECURITY NOTE:"
+	@echo "   This version does NOT use setuid."
+	@echo "   Run with sudo or appropriate capabilities."
+	@echo ""
 
-cmd-disk.o: cmd-disk.c
-	$(CC) $(CFLAGS_OBJS) cmd-disk.c
-		
-cmd-snapshot.o: cmd-snapshot.c
-	$(CC) $(CFLAGS_OBJS) cmd-snapshot.c
-		
-cmd-config.o: cmd-config.c
-	$(CC) $(CFLAGS_OBJS) cmd-config.c
-		
-cmd-net.o: cmd-net.c
-	$(CC) $(CFLAGS_OBJS) cmd-net.c
-		
-cmd-repl.o: cmd-repl.c
-	$(CC) $(CFLAGS_OBJS) cmd-repl.c
-		
-cmd-syshealth.o: cmd-syshealth.c
-	$(CC) $(CFLAGS_OBJS) cmd-syshealth.c
+# Build old (original) version - FOR COMPARISON ONLY
+old: $(PROJECT)-old
 
-cmd-user.o: cmd-user.c
-	$(CC) $(CFLAGS_OBJS) cmd-user.c
+$(PROJECT)-old: $(OBJS_OLD)
+	@echo "⚠️  Building INSECURE original version for comparison only!"
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	@echo "⚠️  DO NOT USE IN PRODUCTION - Contains known vulnerabilities!"
 
+# Compile source files
+%.o: %.c
+	@echo "Compiling $<..."
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Installation
+install: $(PROJECT)-new
+	@echo "Installing AlgoBackup CLI..."
+	install -d $(DESTDIR)$(BINDIR)
+	install -d $(DESTDIR)$(SYSCONFDIR)
+	install -d $(DESTDIR)$(DATADIR)
+	install -d $(DESTDIR)$(LOGDIR)
+	install -d $(DESTDIR)$(DBDIR)
+	install -m 0755 $(PROJECT)-new $(DESTDIR)$(BINDIR)/$(PROJECT)
+	install -m 0644 config/templates/registry.ddl $(DESTDIR)$(DATADIR)/
+	@echo ""
+	@echo "Installation complete!"
+	@echo ""
+	@echo "Configuration directory: $(SYSCONFDIR)"
+	@echo "Data directory:          $(DATADIR)"
+	@echo "Log directory:           $(LOGDIR)"
+	@echo "Database directory:      $(DBDIR)"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Initialize database: sudo $(BINDIR)/$(PROJECT) init"
+	@echo "  2. Run: sudo $(BINDIR)/$(PROJECT)"
+
+# Uninstallation
+uninstall:
+	@echo "Uninstalling AlgoBackup CLI..."
+	rm -f $(DESTDIR)$(BINDIR)/$(PROJECT)
+	rm -rf $(DESTDIR)$(DATADIR)
+	@echo "Note: Configuration, logs, and database preserved"
+	@echo "      Remove manually if needed:"
+	@echo "      - $(SYSCONFDIR)"
+	@echo "      - $(LOGDIR)"
+	@echo "      - $(DBDIR)"
+
+# Clean build artifacts
 clean:
-	@echo "Cleaning"
-	$(RM) $(TARGET) *.o
+	@echo "Cleaning build artifacts..."
+	rm -f $(OBJS_NEW) $(OBJS_OLD)
+	rm -f $(PROJECT)-new $(PROJECT)-old
+	rm -f src/core/*.o src/database/*.o src/commands/*.o src/logging/*.o
+	rm -f *.o
+	@echo "Clean complete."
+
+# Deep clean (including generated files)
+distclean: clean
+	@echo "Deep cleaning..."
+	rm -f *~ src/*~ src/core/*~ src/database/*~ src/commands/*~
+	rm -f include/*~ include/core/*~ include/database/*~ include/commands/*~
+	@echo "Deep clean complete."
+
+# Security scanning
+scan: $(SRCS_NEW)
+	@echo "Running security scans..."
+	@echo ""
+	@echo "=== Static Analysis ==="
+	@command -v cppcheck >/dev/null 2>&1 && \
+		cppcheck --enable=all --inconclusive --std=c99 $(SRCS_NEW) || \
+		echo "⚠️  cppcheck not installed (optional)"
+	@echo ""
+	@echo "=== Security Linting ==="
+	@command -v flawfinder >/dev/null 2>&1 && \
+		flawfinder $(SRCS_NEW) || \
+		echo "⚠️  flawfinder not installed (optional)"
+	@echo ""
+	@echo "Scan complete. Review output above."
+
+# Format code
+format:
+	@echo "Formatting code..."
+	@command -v clang-format >/dev/null 2>&1 && \
+		find src include -name "*.c" -o -name "*.h" | xargs clang-format -i || \
+		echo "⚠️  clang-format not installed (optional)"
+
+# Generate documentation
+docs:
+	@echo "Generating documentation..."
+	@command -v doxygen >/dev/null 2>&1 && \
+		doxygen Doxyfile || \
+		echo "⚠️  doxygen not installed (optional)"
+
+# Run tests (placeholder - tests need to be implemented)
+test:
+	@echo "Running tests..."
+	@echo "⚠️  Test suite not yet implemented"
+	@echo "   TODO: Implement unit tests"
+	@echo "   TODO: Implement integration tests"
+	@echo "   TODO: Implement security tests"
+
+# Help target
+help:
+	@echo "AlgoBackup CLI - Build System"
+	@echo ""
+	@echo "Targets:"
+	@echo "  all         - Build new (refactored) version [default]"
+	@echo "  new         - Build new (refactored) version"
+	@echo "  old         - Build old (original) version [INSECURE - comparison only]"
+	@echo "  install     - Install to system (requires sudo)"
+	@echo "  uninstall   - Remove from system (requires sudo)"
+	@echo "  clean       - Remove build artifacts"
+	@echo "  distclean   - Deep clean including generated files"
+	@echo "  scan        - Run security scanners (cppcheck, flawfinder)"
+	@echo "  format      - Format code with clang-format"
+	@echo "  docs        - Generate documentation with doxygen"
+	@echo "  test        - Run test suite [TODO]"
+	@echo "  help        - Show this help message"
+	@echo ""
+	@echo "Variables:"
+	@echo "  PREFIX      - Installation prefix (default: /usr/local)"
+	@echo "  DESTDIR     - Staging directory for packaging"
+	@echo "  CC          - C compiler (default: gcc)"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make                    # Build new version"
+	@echo "  make scan               # Run security scans"
+	@echo "  sudo make install       # Install to system"
+	@echo "  make PREFIX=/opt/algo   # Custom install location"
+
+# Dependency generation (for incremental builds)
+.depend: $(SRCS_NEW)
+	@echo "Generating dependencies..."
+	@$(CC) $(CFLAGS) $(INCLUDES) -MM $(SRCS_NEW) > .depend
+
+-include .depend
+
+# Prevent deletion of intermediate files
+.PRECIOUS: %.o
+
+# Mark phony targets
+.PHONY: all new old clean distclean install uninstall test scan format docs help
