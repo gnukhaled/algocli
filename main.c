@@ -11,8 +11,15 @@ void sigint_handler(int signal){
 int main(int argc, char **argv){
     char *line, *s;
     char *homedir = getenv("HOME");
-    const char *histfile = strcat(homedir, "/.algohist");
+    char histfile[PATH_MAX];
     struct sigaction sa;
+
+    /* Safely construct histfile path using snprintf to prevent buffer overflow */
+    if (homedir != NULL) {
+        snprintf(histfile, sizeof(histfile), "%s/.algohist", homedir);
+    } else {
+        snprintf(histfile, sizeof(histfile), ".algohist");
+    }
 
     setuid(0);
 
@@ -29,26 +36,26 @@ int main(int argc, char **argv){
     read_history(histfile);
 
     int ret;
-    char *hostname[128];
+    char hostname[128];        /* Fixed: was char *hostname[128] (array of pointers) */
     char *osname = "AlgoOS";
-    char *prompt[512];
+    char prompt[512];          /* Fixed: was char *prompt[512] (array of pointers) */
     char *username;
-    username  = getenv("USER");
+    username = getenv("USER");
 
-    if ((ret = gethostname(hostname, sizeof hostname)) != 0)
+    /* Handle NULL username to prevent crash */
+    if (username == NULL) {
+        username = "unknown";
+    }
+
+    if ((ret = gethostname(hostname, sizeof(hostname))) != 0)
         perror("gethostname");
 
-    strcat((char *)prompt, "[");
-    strcat((char *)prompt, username);
-    strcat((char *)prompt, "@");
-    strcat((char *)prompt, hostname);
-    strcat((char *)prompt, "] ");
-    strcat((char *)prompt, osname);
-    strcat((char *)prompt, " -> ");
+    /* Use snprintf instead of multiple strcat calls to prevent buffer overflow */
+    snprintf(prompt, sizeof(prompt), "[%s@%s] %s -> ", username, hostname, osname);
 
     while ( sigsetjmp( ctrlc_buf, 1 ) != 0 );
 
-        while ((line = readline((char *)prompt)) != NULL){
+        while ((line = readline(prompt)) != NULL){
 		rl_bind_key('\t', rl_complete);
 
 	if (!line)
