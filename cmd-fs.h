@@ -8,8 +8,8 @@
 #include <string.h>
 #include "algo-log.h"
 
-int fs_quota_enable();
-int fs_quota_disable();
-int fs_quota_status();
+int fs_quota_enable(void);
+int fs_quota_disable(void);
+int fs_quota_status(void);
 
 #endif /* FS_H */

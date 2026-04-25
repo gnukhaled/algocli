@@ -1,0 +1,14 @@
+#%PAM-1.0
+#
+# PAM service file for algocli — installed to /etc/pam.d/algocli.
+#
+# Each state-changing command in the shell calls pam_authenticate
+# under this service. We delegate to the system's standard auth
+# stack so that local password rules, MFA, lockout policies, etc.
+# all apply automatically. If your distro doesn't provide
+# system-auth (e.g. Debian/Ubuntu), edit this file to include
+# common-auth/common-account/common-session instead.
+#
+auth      include  system-auth
+account   include  system-auth
+session   include  system-auth

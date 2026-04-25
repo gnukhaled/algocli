@@ -15,12 +15,12 @@
 
 
 
-int accessctrl_ssh_enable();
-int accessctrl_ssh_disable();
-int accessctrl_web_disable();
-int accessctrl_web_enable();
-int accessctrl_ftp_disable();
-int accessctrl_ftp_enable();
+int accessctrl_ssh_enable(void);
+int accessctrl_ssh_disable(void);
+int accessctrl_web_disable(void);
+int accessctrl_web_enable(void);
+int accessctrl_ftp_disable(void);
+int accessctrl_ftp_enable(void);
 
 int ssh_set(int, char *);
 int ssh_add_host(char *);

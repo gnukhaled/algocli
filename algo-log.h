@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <limits.h>
 #include <time.h>
 
 #define MSG_MAX 300
@@ -35,12 +36,13 @@
 #define CTX_NET         13
 #define CTX_BP          14
 #define CTX_FS          15
+#define CTX_AUDIT       16
 
-char *tstamp();
-int algolog(int type, char *fmt, ...);
+char *tstamp(void);
+int algolog(int type, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 void init_logger(int ctx);
 
-FILE *logfp;
+extern FILE *logfp;
 
 //extern char *username;
 //username = getenv("USER");

@@ -1,8 +1,8 @@
 
 #include "algo-log.h"
 
-extern FILE *logfp;
-char timestamp[255];
+FILE *logfp = NULL;
+static char timestamp[255];
 
 void init_logger(int ctx){
 
@@ -55,6 +55,9 @@ void init_logger(int ctx){
 	case CTX_FS:
                 filename = "/tmp/fs.log";
                 break;
+	case CTX_AUDIT:
+                filename = "/tmp/algocli-audit.log";
+                break;
 	default:
                 filename = "/dev/null";
   }
@@ -86,93 +89,40 @@ char *tstamp() {
     return timestamp;
 }
 
-int algolog(int type, char *fmt, ...){
-
+int algolog(int type, const char *fmt, ...){
   va_list ap;
-  char format[MSG_MAX];
   int count = 0;
-  int i, j;
-  char *s;
+  char hostname[HOST_NAME_MAX + 1];
 
-  int ret;
-  char hostname[128];
+  if (!logfp)
+      return -1;
 
-  if ((ret = gethostname(hostname, sizeof hostname)) != 0){
-	perror("gethostname");
+  if (gethostname(hostname, sizeof hostname) != 0) {
+      perror("gethostname");
+      snprintf(hostname, sizeof hostname, "localhost");
   }
+  hostname[sizeof hostname - 1] = '\0';
 
-  time_t timestamp = time(NULL);
-  char *ts = ctime(&timestamp);
-
-  fprintf(logfp,"%s %s ", tstamp(), hostname);
+  count += fprintf(logfp, "%s %s ", tstamp(), hostname);
 
   switch (type){
-	case 1:
-		fprintf(logfp,"%s ", "CRITICAL:");
-                break;
-        case 2:
-                fprintf(logfp,"%s ", "ERROR:");
-                break;
-        case 3:
-                fprintf(logfp,"%s ", "WARNING:");
-                break;
-        case 4:
-                fprintf(logfp,"%s ", "NOTICE:");
-                break;
-        case 5:
-                fprintf(logfp,"%s ", "INFO:");
-                break;
+        case ALGO_CRIT:   count += fprintf(logfp, "CRITICAL: "); break;
+        case ALGO_ERR:    count += fprintf(logfp, "ERROR: ");    break;
+        case ALGO_WARN:   count += fprintf(logfp, "WARNING: ");  break;
+        case ALGO_NOTICE: count += fprintf(logfp, "NOTICE: ");   break;
+        case ALGO_INFO:   count += fprintf(logfp, "INFO: ");     break;
+        default: break;
   }
 
-
   va_start(ap, fmt);
-
-  while (*fmt){
-
-    for (j = 0; fmt[j] && fmt[j] != '%'; j++)
-      format[j] = fmt[j];
-
-    if (j){
-      format[j] = '\0';
-      count += fprintf(logfp, format);
-      fmt += j;
-    }else{
-      for (j = 0; !isalpha(fmt[j]); j++){
-        format[j] = fmt[j];
-        if (j && fmt[j] == '%')
-          break;
-      }
-      format[j] = fmt[j];
-      format[j + 1] = '\0';
-      fmt += j + 1;
-
-      switch (format[j]) {
-	case 'd':
-		i = va_arg(ap, int);
-		count += fprintf(logfp, format, i);
-		break;
-
-	case 's':
-		s = va_arg(ap, char *);
-		count += fprintf(logfp, format, s);
-		break;
-
-	case 'n':
-		count += fprintf(logfp, "%d", count);
-		break;
-
-	case '%':
-		count += fprintf(logfp, "%%");
-		break;
-
-		default:
-		fprintf(stderr, "Invalid log message format\n");
-      }
-    }
- }
-
+  count += vfprintf(logfp, fmt, ap);
   va_end(ap);
+
+  fflush(logfp);
+  /* TODO(phase3): keep the FILE* open across calls instead of
+   * fclose-ing per call; require init_logger() once at startup. */
   fclose(logfp);
+  logfp = NULL;
   return count;
 }
 

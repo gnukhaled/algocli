@@ -1,0 +1,157 @@
+.\" algocli.1 — man page for the AlgoBackup admin shell.
+.\" Format: BSD mdoc.  Render: man -l algocli.1
+.Dd April 25, 2026
+.Dt ALGOCLI 1
+.Os
+.Sh NAME
+.Nm algocli
+.Nd interactive admin shell for the AlgoBackup appliance
+.Sh SYNOPSIS
+.Nm
+.Op Fl h | Fl Fl help
+.Op Fl v | Fl Fl version
+.Sh DESCRIPTION
+.Nm
+is the privileged readline shell that operators use to administer an
+AlgoBackup appliance: managing backup points, NFS shares, SSH/FTP/web
+access control, filesystem quotas, and basic system operations
+(reboot, shutdown, MOTD).
+.Pp
+The binary is installed setuid root.
+At startup it drops effective uid back to the invoking user and
+re-escalates only around the specific syscalls that need root
+.Pq Xr reboot 2 ,
+.Xr fork 2 + Xr execve 2
+of root-owned tools, writes under
+.Pa /etc .
+Every state-changing command is gated by PAM re-authentication.
+Authentication attempts and command outcomes are written to
+.Pa /tmp/algocli-audit.log .
+.Sh OPTIONS
+.Bl -tag -width ".Fl Fl version"
+.It Fl h , Fl Fl help
+Print a short usage message and exit.
+.It Fl v , Fl Fl version
+Print the build version string and exit.
+.El
+.Sh COMMANDS
+At the prompt, type
+.Ic help
+for the full top-level command list, or any command name to see its
+sub-commands.
+The most-used commands:
+.Bl -tag -width ".Ic accessctrl"
+.It Ic bp Ar verb Op Ar args
+Backup-point lifecycle:
+.Ic bp create | delete | rename | list ,
+plus
+.Ic bp quota set Ar bp Ar limit .
+Names must match
+.Bq Pa A-Z a-z 0-9 _ . -
+and be 1\(en64 characters.
+.It Ic fs quota Ar verb
+Filesystem-level btrfs quota controls
+.Pq Ic enable | disable | status .
+.It Ic nfs Ar verb Op Ar args
+NFS export operations:
+.Ic enable | disable | share | unshare | list .
+Hosts must be valid RFC-1123 names.
+.It Ic accessctrl Ar svc Ar verb Op Ar args
+Service ACLs.
+.Ar svc
+is one of
+.Ic ssh | ftp | web .
+Each supports
+.Ic enable | disable | set ;
+.Ic ssh
+also has
+.Ic add allowed-host , del allowed-host , list .
+.It Ic system Ar verb
+.Ic reboot | shutdown | set motd .
+Reboot/shutdown require an interactive y/N confirmation in addition
+to PAM auth.
+.Ic set motd
+reads MOTD content from stdin until a single
+.Ql \&.
+line or EOF, then atomically replaces
+.Pa /etc/motd .
+.It Ic log Ar verb
+.Ic list | view Ar file | watch Ar file .
+Read-only; does not require auth.
+.It Ic exit
+Leave the shell.
+.El
+.Sh AUTHENTICATION
+Every state-changing command runs
+.Xr pam_authenticate 3
+under the PAM service named
+.Pa algocli .
+A PAM service file must therefore exist at
+.Pa /etc/pam.d/algocli ;
+the
+.Cm make install
+target lays down a default that delegates to
+.Pa system-auth .
+.Sh FILES
+.Bl -tag -width ".Pa /tmp/algocli-audit.log"
+.It Pa /mnt/backup
+Default backup root (override at build time with
+.Fl D Ar BACKUP_ROOT ) .
+.It Pa /mnt/support
+Default log-view directory
+.Pq Fl D Ar LOG_VIEW_DIR .
+.It Pa /etc/motd
+Target file for
+.Ic system set motd .
+.It Pa /etc/pam.d/algocli
+PAM service file consulted by the auth gate.
+.It Pa registry.db
+Sqlite3 configuration store.
+Resolved relative to the working directory by default; override with
+.Fl D Ar REGISTRY_PATH_DEFAULT .
+.It Pa $XDG_STATE_HOME/algocli/history
+Readline history (capped at 1000 entries).
+Falls back to
+.Pa $HOME/.local/state/algocli/history
+then
+.Pa /tmp/algocli/history .
+.It Pa /tmp/algocli-audit.log
+Audit trail of authentication attempts and privileged-command
+outcomes.
+.It Pa /tmp/<context>.log
+Per-context operation logs
+.Po Pa bp.log , Pa fs.log , Pa nfs.log , ... Pc .
+.El
+.Sh SECURITY NOTES
+The shell takes adversarial input seriously.
+All command arguments cross input validators
+.Pq Pa validate.h
+before reaching the registry or any spawned subprocess.
+SQL is constructed exclusively via
+.Xr sqlite3_prepare_v2 3
+with bound parameters; no user-supplied byte ever reaches the SQL
+parser.
+Subprocesses are launched via
+.Xr execve 2
+with absolute paths and a sanitized environment
+.Pq clearenv + curated allowlist ;
+no shell metacharacter has any meaning.
+.Sh EXIT STATUS
+.Bl -tag -width ".It 64"
+.It 0
+Success
+.Pq normal exit, Fl Fl help , Fl Fl version .
+.It 64
+Usage error (unknown flag).
+.It other
+Command-specific failure
+.Pq see audit log .
+.El
+.Sh SEE ALSO
+.Xr btrfs 8 ,
+.Xr pam.conf 5 ,
+.Xr systemctl 1 ,
+.Xr sqlite3 1
+.Sh AUTHORS
+.An Khaled Ahmed Aq Mt khaled.ahmed@algo-systems.net
+and contributors.

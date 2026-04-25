@@ -15,7 +15,7 @@ int bp_fs_create(char *name);
 int bp_delete(char *name);
 int bp_rename(char *orig, char *newname);
 int bp_quota_set(char *name, char *size);
-int bp_list();
+int bp_list(void);
 
 int create_bp(char *, char *);
 

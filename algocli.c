@@ -2,639 +2,354 @@
 #include "algocli-defs.h"
 #include "cmds.h"
 #include "registry.h"
+#include "auth.h"
 
 command_t *ccmd = (command_t *)NULL;
 command_t *command = (command_t *)NULL;
 
 char *format_doc(int spcount, const char *text){
-  int doclen = (spcount + strlen(text));
-  char *t = calloc((doclen + 1), sizeof(char));
-  int i;
-
-  if (t == NULL)
-	fprintf(stderr, "ERROR: not enough memory\n");
-
-  for (i = 0; i < spcount ; i++){
-	t[i] = ' ';
+  if (spcount < 0) spcount = 0;
+  if (!text) text = "";
+  size_t textlen = strlen(text);
+  size_t doclen  = (size_t)spcount + textlen;
+  char *t = calloc(doclen + 1, sizeof(char));
+  if (!t) {
+      fprintf(stderr, "format_doc: out of memory\n");
+      return NULL;
   }
-
-  strncat(t, text, doclen);
-  return (char*)t;
+  for (int i = 0; i < spcount; i++)
+      t[i] = ' ';
+  memcpy(t + spcount, text, textlen);
+  t[doclen] = '\0';
+  return t;
 }
 
-void cmd_ref(){
-  int i, j = 0;
+void cmd_ref(void){
+  int j = 0;
   int length = 0;
   int longest = 0;
   int reqspc = 0;
   char *line = rl_line_buffer;
-  command_t *command;
+  command_t *cmd;
+  char *line_copy;
 
   printf("Possible commands for \"%s\" are:\n\n", line);
 
-  command = find_last_command(strdup(line));
-
-  while (command->subcmd[j].name != (char *)NULL){
-	length =  strlen(command->subcmd[j].name);
-	if ( length > longest )
-		longest = length;
-	j++;
+  line_copy = strdup(line);
+  if (!line_copy)
+      return;
+  cmd = find_last_command(line_copy);
+  if (!cmd || !cmd->subcmd) {
+      free(line_copy);
+      printf("\n");
+      return;
   }
 
-  for (i = 0 ; ; i++){
-	if (command->subcmd[i].name == (char*)NULL)
-	    break;
-        length = strlen(command->subcmd[i].name);
-	reqspc = ((longest - length) + longest);
-	printf("\t%s %s%s\n",command->name, command->subcmd[i].name,
-		format_doc(reqspc, command->subcmd[i].doc));
-        }
+  while (cmd->subcmd[j].name != (char *)NULL){
+      length = (int)strlen(cmd->subcmd[j].name);
+      if (length > longest)
+          longest = length;
+      j++;
+  }
 
+  for (int i = 0; cmd->subcmd[i].name; i++){
+      length = (int)strlen(cmd->subcmd[i].name);
+      reqspc = (longest - length) + longest;
+      char *doc = format_doc(reqspc, cmd->subcmd[i].doc);
+      printf("\t%s %s%s\n", cmd->name, cmd->subcmd[i].name, doc ? doc : "");
+      free(doc);
+  }
+
+  free(line_copy);
   printf("\n");
 }
 
-int algoauth(){
-  pam_handle_t* pamh;
+int algoauth(void){
+  pam_handle_t *pamh = NULL;
   struct pam_conv pamc;
+  int rc;
+  int ok = FALSE;
+  const char *user = getenv("USER");
+
   pamc.conv = &misc_conv;
   pamc.appdata_ptr = NULL;
-  pam_start ("algocli", getenv ("USER"), &pamc, &pamh);
-  printf("\nPlease re-authenticate as user %s\n",
-	 getenv("USER"));
 
-  if (pam_authenticate (pamh, 0) != PAM_SUCCESS){
-	fprintf (stderr, "User verification failed!\n");
-	return FALSE;
-  }else{
-	return TRUE;
+  if (pam_start("algocli", user, &pamc, &pamh) != PAM_SUCCESS) {
+      fprintf(stderr, "PAM initialization failed\n");
+      return FALSE;
   }
 
-  pam_end (pamh, 0);
+  printf("\nPlease re-authenticate as user %s\n", user ? user : "(unknown)");
+
+  rc = pam_authenticate(pamh, 0);
+  if (rc != PAM_SUCCESS) {
+      fprintf(stderr, "User verification failed!\n");
+      ok = FALSE;
+  } else {
+      ok = TRUE;
+  }
+
+  pam_end(pamh, rc);
+  return ok;
 }
 
 char *stripwhite(char *string){
-  register char *s, *t;
+  char *s = string;
+  char *t;
 
-  for (s = string; whitespace(*s); s++)
+  while (whitespace(*s))
+      s++;
 
-  if (*s == 0)
-      return (s);
-  t = s + strlen (s) - 1;
+  if (*s == '\0')
+      return s;
+
+  t = s + strlen(s) - 1;
   while (t > s && whitespace(*t))
-    t--;
+      t--;
   *++t = '\0';
 
   return s;
 }
 
-int execute_command(char *line){
-  register int i;
-  char **params = calloc(100, sizeof(char*));
-  char **cmdlist = calloc(500, sizeof(char*));
-  char *cmd;
-  int counter = 1;
-  int pcounter = 0;
-  int index = 0;
-  char *commstr = "";
+/* Maximum number of whitespace-separated tokens we accept on one
+ * command line. The original code calloc'd 500 entries on every
+ * keypress; in practice the deepest command is `accessctrl ssh set
+ * listen-address <addr>` (5 tokens) and the longest argument list
+ * is the SSH allowed-host add (1 verb + N hosts). 64 is comfortably
+ * above any real input. */
+#define MAX_TOKENS 64
 
-  cmdlist[0] = strtok(line, " ");
-  while ((cmd = strtok(NULL, " "))){
-	if (cmd){
-	   cmdlist[counter] = cmd;
-	   counter++;
-	}
+int execute_command(char *line){
+  char *cmdlist[MAX_TOKENS] = {0};
+  char *params[MAX_TOKENS]  = {0};
+  int counter = 0;
+  int pcounter = 0;
+  int index;
+  char *tok;
+  const char *commstr;
+
+  /* Tokenize. strtok mutates `line` in place; cmdlist holds pointers
+   * back into the same buffer. */
+  tok = strtok(line, " ");
+  while (tok != NULL) {
+      if (counter >= MAX_TOKENS) {
+          fprintf(stderr, "Too many arguments (limit %d)\n", MAX_TOKENS);
+          return -1;
+      }
+      cmdlist[counter++] = tok;
+      tok = strtok(NULL, " ");
+  }
+  if (counter == 0) return 0;   /* empty line — already filtered upstream */
+
+  command = find_command(cmdlist[0]);
+
+  /* `help <name>` short-circuit: pass just the requested command name. */
+  if (command && counter > 1 && strcmp(command->name, "help") == 0) {
+      params[0] = cmdlist[1];
+      return command->func(params);
   }
 
- command = find_command(cmdlist[0]);
-
- if (command && cmdlist[1] && (strcmp(command->name, "help") == 0)){
-	params[0] = cmdlist[1];
-	return ((*(command->func)) (params));
- }
-
- if (command){
-     for ( i = 1 ; i < counter ; i++ ){
-         while ((command->subcmd != (command_t *)NULL) &&
-		 (commstr = command->subcmd[index].name)){
-
-	       if (strcmp(commstr, cmdlist[i]) == 0){
-	          command = &command->subcmd[index];
-	          index = 0;
-	          break;
-	       }
-         index++;
-         }
-	      if (command->subcmd == (command_t *)NULL){
-			params[pcounter] = cmdlist[i+1];
-			pcounter++;
-		}
-     }
- }else{
+  if (!command) {
       func_help(cmdlist);
-      return (-1);
- }
+      return -1;
+  }
 
- return ((*(command->func)) (params));
+  /* Walk the command tree. Every token after a leaf becomes a
+   * positional argument in params[]. */
+  for (int i = 1; i < counter; i++) {
+      index = 0;
+      bool matched = false;
+      while (command->subcmd != NULL &&
+             (commstr = command->subcmd[index].name) != NULL) {
+          if (strcmp(commstr, cmdlist[i]) == 0) {
+              command = &command->subcmd[index];
+              matched = true;
+              break;
+          }
+          index++;
+      }
+      if (!matched && command->subcmd == NULL) {
+          /* This token (and every later one) is a positional arg. */
+          if (pcounter < MAX_TOKENS - 1) {
+              params[pcounter++] = cmdlist[i];
+          }
+      }
+  }
+
+  /* Policy gate: if the resolved command demands authentication, run
+   * PAM re-auth here so each func_* doesn't need to repeat the call.
+   * Failure produces an audit entry and stops the dispatch. */
+  if (command->flags & CMD_AUTH) {
+      if (!algoauth()) {
+          audit_log_authfail(command->name);
+          return -1;
+      }
+      audit_log_authok(command->name);
+  }
+
+  return command->func(params);
 }
 
-command_t *find_command(char *name){
-  register int i;
+command_t *find_command(const char *name){
+  int i;
 
   for (i = 0; commands[i].name; i++)
-    if (strcmp (name, commands[i].name) == 0)
-      return (&commands[i]);
-
-  return ((command_t *)NULL);
-}
-
-command_t *find_last_command(char *line){
-  command_t *command;
-  char *buf[70];
-  char *cmd;
-  char *commstr = "";
-  register int counter = 1;
-  register int i;
-  int index = 0;
-
-  buf[0] = strtok(line, " ");
-
-  while ((cmd = strtok(NULL, " "))){
-         if (cmd){
-             buf[counter] = cmd;
-             counter++;
-        }
-  }
-
-  if (buf[0])
-      command = find_command(buf[0]);
-
-  if (command){
-     for ( i = 1 ; i < counter ; i++ ){
-         while ((command->subcmd != (command_t *)NULL) &&
-                 (commstr = command->subcmd[index].name)){
-
-               if (strcmp(commstr, buf[i]) == 0){
-                  command = &command->subcmd[index];
-                  index = 0;
-                  break;
-               }
-         index++;
-         }
-     }
-	return command;
- }
+    if (strcmp(name, commands[i].name) == 0)
+      return &commands[i];
 
   return (command_t *)NULL;
 }
 
-void initialize_readline(char *progname){
-  rl_readline_name = progname;
-  rl_attempted_completion_function =
-		(rl_completion_func_t*) &algocli_completion;
-}
+command_t *find_last_command(char *line){
+  char *buf[70] = {0};
+  char *tok;
+  int counter = 1;
 
-char **algocli_completion(char *text, int start,
-			  int end __attribute__((unused))){
+  buf[0] = strtok(line, " ");
+  if (!buf[0])
+      return NULL;
 
-   char **matches;
-   matches = (char **)NULL;
-
-   if (start == 0 ){
-	matches = rl_completion_matches(text, &algoclibase_generator);
-	rl_attempted_completion_over = 1;
-   }else{
-	char *buffer = malloc(70 * sizeof(char*));
-	buffer = strdup(rl_line_buffer);
-	ccmd = find_last_command(buffer);
-        matches= rl_completion_matches(text, &algoclisub_generator);
-	rl_attempted_completion_over = 1;
+  while (counter < 70 && (tok = strtok(NULL, " ")) != NULL) {
+      buf[counter++] = tok;
   }
 
-  return (matches);
-}
+  command_t *cmd_ptr = find_command(buf[0]);
+  if (!cmd_ptr)
+      return NULL;
 
-char *algoclibase_generator(char *text, int state){
-  static int list_index, len;
-  char *name;
-
-  if (!state){
-      list_index = 0;
-      len = strlen(text);
-    }
-
-  while ((name = commands[list_index].name)){
-      list_index++;
-      if (strncmp(name, text, len) == 0){
-        return (strdup(name));
+  for (int i = 1; i < counter; i++) {
+      int index = 0;
+      const char *commstr;
+      while (cmd_ptr->subcmd != NULL &&
+             (commstr = cmd_ptr->subcmd[index].name) != NULL) {
+          if (strcmp(commstr, buf[i]) == 0) {
+              cmd_ptr = &cmd_ptr->subcmd[index];
+              break;
+          }
+          index++;
       }
-
-    }
-
-  return ((char *)NULL);
-}
-
-char *algoclisub_generator(char *text, int state){
-  static int list_index, len;
-  char *name;
-
-  if (!state){
-      list_index = 0;
-      len = strlen(text);
   }
 
-  while (ccmd && (ccmd->subcmd != (command_t *)NULL)
-         && (name = ccmd->subcmd[list_index].name)){
-	list_index++;
-	if ((strncmp(name, text, len) == 0)){
-             return (strdup(name));
-	}
-    }
-
-  return ((char *)NULL);
+  return cmd_ptr;
 }
 
-int func_exit(){
+void initialize_readline(const char *progname){
+  /* readline's rl_readline_name is declared `char *` for backward
+   * compatibility, but the API never modifies it. Allocate writable
+   * storage so we don't have to cast away const. */
+  static char readline_name[64];
+  if (progname) {
+      snprintf(readline_name, sizeof readline_name, "%s", progname);
+      rl_readline_name = readline_name;
+  }
+  rl_attempted_completion_function = algocli_completion;
+  rl_bind_key('\t', rl_complete);
+}
+
+char **algocli_completion(const char *text, int start, int end){
+   char **matches = NULL;
+   (void)end;
+
+   /* Reset between sessions: ccmd is read by algoclisub_generator,
+    * which only walks subcommands when ccmd is non-NULL. We must
+    * always rewrite ccmd (or set it to NULL) before kicking off a
+    * sub-completion, so a stale ccmd from a previous tab can't leak. */
+   ccmd = NULL;
+
+   if (start == 0) {
+       matches = rl_completion_matches(text, algoclibase_generator);
+   } else {
+       char *buffer = strdup(rl_line_buffer);
+       if (buffer) {
+           ccmd = find_last_command(buffer);
+           free(buffer);
+       }
+       matches = rl_completion_matches(text, algoclisub_generator);
+   }
+   rl_attempted_completion_over = 1;
+   return matches;
+}
+
+char *algoclibase_generator(const char *text, int state){
+  static size_t list_index;
+  static size_t len;
+  const char *name;
+
+  if (!state) {
+      list_index = 0;
+      len = text ? strlen(text) : 0;
+  }
+
+  while ((name = commands[list_index].name) != NULL) {
+      list_index++;
+      if (strncmp(name, text ? text : "", len) == 0) {
+          return strdup(name);
+      }
+  }
+  return NULL;
+}
+
+char *algoclisub_generator(const char *text, int state){
+  static size_t list_index;
+  static size_t len;
+  const char *name;
+
+  if (!state) {
+      list_index = 0;
+      len = text ? strlen(text) : 0;
+  }
+  if (!ccmd || ccmd->subcmd == NULL) return NULL;
+
+  while ((name = ccmd->subcmd[list_index].name) != NULL) {
+      list_index++;
+      if (strncmp(name, text ? text : "", len) == 0) {
+          return strdup(name);
+      }
+  }
+  return NULL;
+}
+
+int func_exit(char **arg){
+  (void)arg;
   exit(0);
 }
 
-int func_nfs_share_list(char **arg){
-  return nfs_share_list(arg[0]);
-}
+/* func_nfs_* moved to cmd-nfs.c (Phase 7.2). */
 
-int func_nfs_share(char **arg){
-  return nfs_share(arg[0], arg[1], arg[2]);
-}
+/* func_system_* moved to cmd-system.c (Phase 7.2). */
+/* func_accessctrl moved to cmd-accessctrl.c (Phase 7.2). */
 
-int func_nfs_unshare(char **arg){
-  return nfs_unshare(arg[0], arg[1]);
-}
+/* func_bp moved to cmd-bp.c (Phase 7.2). */
 
-int func_nfs_enable(){
-  return nfs_enable();
-}
+/* Stubs for commands whose underlying cmd-*.c files are still empty.
+ * Phase 4 surfaces them honestly: print a clear message and return
+ * -ENOSYS so callers/scripts can detect "not implemented". The
+ * STUB_NOT_IMPLEMENTED macro lives in algocli.h so the cmd-*.c
+ * modules can reuse it for their own per-leaf stubs. */
 
-int func_nfs_disable(){
-  return nfs_disable();
-}
+int func_syshealth(char **arg){ (void)arg; STUB_NOT_IMPLEMENTED("syshealth"); }
+int func_config(char **arg)   { (void)arg; STUB_NOT_IMPLEMENTED("config"); }
+int func_disk(char **arg)     { (void)arg; STUB_NOT_IMPLEMENTED("disk"); }
+int func_repl(char **arg)     { (void)arg; STUB_NOT_IMPLEMENTED("repl"); }
+int func_net(char **arg)      { (void)arg; STUB_NOT_IMPLEMENTED("net"); }
+int func_cifs(char **arg)     { (void)arg; STUB_NOT_IMPLEMENTED("cifs"); }
+int func_snapshot(char **arg) { (void)arg; STUB_NOT_IMPLEMENTED("snapshot"); }
+int func_user(char **arg)     { (void)arg; STUB_NOT_IMPLEMENTED("user"); }
+int func_vtl(char **arg)      { (void)arg; STUB_NOT_IMPLEMENTED("vtl"); }
 
-int func_system_set(){
-  cmd_ref();
-  return 0;
-}
+/* func_fs / func_nfs / func_system moved to cmd-fs.c / cmd-nfs.c /
+ * cmd-system.c (Phase 7.2). */
 
-int func_system_set_motd(){
-  return system_set_motd();
-}
+/* func_log* moved to cmd-log.c (Phase 7.2). */
 
-int func_system_reboot(){
-  return algo_reboot();
-}
+/* func_bp_* moved to cmd-bp.c (Phase 7.2). */
 
-int func_system_shutdown(){
-  return algo_shutdown();
-}
+/* func_fs* moved to cmd-fs.c (Phase 7.2). */
 
-int func_accessctrl(char **arg){
-  cmd_ref();
-  return 0;
-}
-
-int func_bp(char **arg){
-  cmd_ref();
-  return 0;
-}
-
-int func_syshealth(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_config(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_disk(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_fs(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_repl(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_net(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_nfs(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_cifs(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_snapshot(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_system(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_user(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_vtl(char **arg){
-  //cmd_ref();
-  return (0);
-}
-
-int func_log(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_log_list(char **arg){
-   int i = 0;
-   int ret;
-   int exists = 0;
-
-   DIR *logdir;
-   struct dirent  *dir;
-   logdir = opendir(LOG_DIR);
-
-   while ((dir = readdir(logdir)) != NULL){
-	   if (strncmp(dir->d_name, arg[0], strlen(arg[0])) != 0){
-		printf("No such log file %s\n", arg[0]);
-		return -1;
-	   }
-   }
-
-   printf("\n");
-   printf("%s      %s     %s\n", "File Name", "Size (MB)", "Modified");
-   printf("---------      ---------     ------------------------\n");
-
-   if (arg[0] == '\0'){
-   if (logdir){
-      while ((dir = readdir(logdir)) != NULL){
-	    if (dir->d_name[0] != '.'){
-		ret = log_list(dir->d_name);
-	    }
-      }
-   }
-   }else{
-
-   }
-      printf("\n");
-      closedir(logdir);
-
-return ret;
-}
-
-int func_log_view(char **arg){
-
-	char *string = log_view(arg[0]);
-	if (string) {
-	    puts(string);
-        }
-
-	return 0;
-}
-
-int func_log_watch(char **arg){
-  printf("Place LOG WATCH help/usage here\n");
-  return (0);
-}
-
-int func_bp_create(char **arg){
-
-  time_t bpctime;
-  bpctime = time(NULL);
-  char *createdon = ctime(&bpctime);
-  char *pos;
-
-  if ((pos = strchr(createdon, '\n')) != NULL)
-       *pos = '\0';
-
-  return create_bp(arg[0], createdon);
-
-}
-
-int func_bp_delete(char **arg){
-  if (algoauth()){
-      return bp_delete(arg[0]);
-  }
-  return 0;
-}
-
-int func_bp_rename(char **arg){
-  return bp_rename(arg[0], arg[1]);
-}
-
-int func_bp_quota(char **arg){
-  cmd_ref();
-  return 0;
-}
-
-int func_bp_quota_set(char **arg){
-  return bp_quota_set(arg[0], arg[1]);
-}
-
-int func_bp_list(char **arg){
-  printf("Place BP LIST help/usage here\n");
-  return (0);
-}
-
-int func_fs_quota(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_fs_quota_enable(char **arg){
-  return fs_quota_enable();
-
-}
-
-int func_fs_quota_disable(char **arg){
-  return fs_quota_disable();
-}
-
-int func_fs_quota_status(char **arg){
-  return fs_quota_status();
-}
-
-int func_accessctrl_ssh_list(){
-  return 0;
-}
-
-int func_accessctrl_ssh_list_config(){
-  return 0;
-}
-
-int func_accessctrl_ssh_list_allowedhosts(){
-  return 0;
-}
-
-int func_accessctrl_ssh_disable(char **arg){
-  return accessctrl_ssh_disable();
-}
-
-int func_accessctrl_ssh_enable(char **arg){
-  return accessctrl_ssh_enable();
-}
-
-int func_accessctrl_ftp_enable(char **arg){
-  return accessctrl_ftp_enable();
-}
-
-int func_accessctrl_ftp_disable(char **arg){
-  return accessctrl_ftp_disable();
-}
-
-int func_accessctrl_web_enable(char **arg){
-  return accessctrl_web_enable();
-}
-
-int func_accessctrl_web_disable(char **arg){
-  return accessctrl_web_disable();;
-}
-
-int func_accessctrl_ssh(char **arg){
-    cmd_ref();
-    return (0);
-}
-
-int func_accessctrl_ftp(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_accessctrl_ssh_set(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_accessctrl_ssh_set_port(char **arg){
-
-  int ret;
-  ret = ssh_set(SSH_PORT, arg[0]);
-  if (ret){
-	printf("Failed to set the SSH port, please contact support\n");
-  }
-
-  return ret;
-}
-
-int func_accessctrl_ssh_set_protocol(char **arg){
-
-  int ret;
-  ret = ssh_set(SSH_PROTO, arg[0]);
-  if (ret){
-        printf("Failed to set the SSH protocol version, please contact support\n");
-  }
-
-  return ret;
-}
-
-int func_accessctrl_ssh_set_listen_address(char **arg){
-
-  int ret;
-  ret = ssh_set(SSH_LISTENADDR, arg[0]);
-  if (ret){
-        printf("Failed to set the SSH network listen address, please contact support\n");
-  }
-
-  return ret;
-}
-
-int func_accessctrl_ssh_add(char **arg) {
-  cmd_ref();
-  return 0;
-}
-
-int func_accessctrl_ssh_del(char **arg) {
-  cmd_ref();
-  return 0;
-}
-
-int func_accessctrl_ssh_add_allowedhost(char **arg) {
-  int i = 0;
-  int ret;
-
-  while (arg[i] != NULL){
-	ret = ssh_add_host(arg[i]);
-	if (ret)
-	    return 1;
-	i++;
-  }
-  return ret;
-
-}
-
-int func_accessctrl_ssh_del_allowedhost(char **arg) {
-  int i = 0;
-  int ret;
-
-  while (arg[i] != NULL){
-        ret = ssh_del_host(arg[i]);
-        if (ret)
-            return 1;
-        i++;
-  }
-  return ret;
-}
-
-int func_accessctrl_ftp_set(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_accessctrl_ftp_set_port(char **arg){
-  printf("Place accessctrl ftp set port help/usage here\n");
-  return (0);
-}
-
-int func_accessctrl_web_set(char **arg){
-  cmd_ref();
-  return (0);
-}
-
-int func_accessctrl_web_set_http_port(char **arg){
-  printf("Place accessctrl web http port help/usage here\n");
-  return (0);
-}
-
-int func_accessctrl_web_set_https_port(char **arg){
-  printf("Place accessctrl web https port help/usage here\n");
-  return (0);
-}
-
-int func_accessctrl_web_set_http_session(char **arg){
-  printf("Place accessctrl web set http session-timeout help/usage here\n");
-  return (0);
-}
-
-int func_accessctrl_web(char **arg){
-  cmd_ref();
-  return (0);
-}
+/* func_accessctrl_* moved to cmd-accessctrl.c (Phase 7.2). */
 
 int func_help(char **arg){
+  (void)arg;
   int i;
   int j = 0;
   int length = 0;
@@ -656,8 +371,9 @@ int func_help(char **arg){
 	  || (strcmp (arg[0], commands[i].name) == 0)){
 	  length =  strlen(commands[i].name);
           reqspc = ((longest - length) + longest);
-          printf("%s%s.\n", commands[i].name,
-		 format_doc(reqspc, commands[i].doc));
+          char *doc = format_doc(reqspc, commands[i].doc);
+          printf("%s%s.\n", commands[i].name, doc ? doc : "");
+          free(doc);
           printed++;
         }
     }

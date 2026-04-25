@@ -1,0 +1,24 @@
+# Build outputs
+algocli
+*.o
+*.d
+
+# Test binaries (left in tests/ after `make check`)
+tests/test_validate
+tests/test_registry
+
+# Sanitizer / coverage byproducts (`make BUILD=asan`, gcov/lcov)
+*.gcda
+*.gcno
+*.gcov
+
+# Editor / backup / swap files
+*~
+*.bak
+*.orig
+*.rej
+.*.swp
+.*.swo
+
+# Local install staging
+/tmp/staging/

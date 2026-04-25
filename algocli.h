@@ -2,10 +2,12 @@
 #ifndef ALGOCLI_H
 #define ALGOCLI_H
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
-//#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -29,64 +31,92 @@
 #define TRUE 1
 #define FALSE 0
 
-#define NULL_COMMAND {(char *)NULL, NULL, (command_t *)NULL, \
-								(char *)NULL}
+/* Stub helper used by func_* shims for commands not yet implemented.
+ * Prints a one-line "not implemented yet" message and returns -ENOSYS
+ * so callers and scripts can detect failure. When the real
+ * implementation lands, delete the using line entirely. */
+#define STUB_NOT_IMPLEMENTED(name) do { \
+    fprintf(stderr, "%s: not implemented yet\n", name); \
+    return -ENOSYS; \
+} while (0)
 
-/* The command type definition, each command 
- * (command_t) should link to an array of other 
- * sub commands (command_t) */
+#define NULL_COMMAND { (char *)NULL, (int (*)(char **))NULL, \
+                       (command_t *)NULL, (char *)NULL, 0 }
+
+/* The command type definition. Each command (command_t) may link to
+ * an array of sub-commands (command_t) terminated by NULL_COMMAND.
+ *
+ * `flags` is a bit-set declaring policy on the command. The
+ * dispatcher consults these flags before invoking `func`, so each
+ * func_* implementation stays focused on its actual work and the
+ * security policy is visible alongside the command's name and doc. */
+
+/* CMD_AUTH: command requires PAM re-authentication of the invoking
+ * user before it runs. The dispatcher wraps the call with AUTH_GATE
+ * — failure aborts the dispatch, success records an audit-log entry. */
+#define CMD_AUTH (1u << 0)
 
 typedef struct command {
     char *name;
-    int (*func)(char**);
+    int (*func)(char **);
     struct command *subcmd;
     char *doc;
+    unsigned flags;
 } command_t;
 
-/* readline executable commands callable functions */
-int func_exit();
-int func_accessctrl(), func_bp(), func_syshealth(), func_config(), func_disk();
-int func_fs(), func_help(), func_repl(), func_cifs(), func_vtl();
-int func_net(), func_nfs(), func_snapshot();
-int func_system(), func_user(), func_log();
-int func_log_list(), func_log_view(), func_log_watch();
-int func_bp_create(), func_bp_delete(), func_bp_rename(), func_bp_list();
-int func_bp_quota(), func_bp_quota_set();
-int func_fs_quota(), func_fs_quota_enable();
-int func_fs_quota_disable(), func_fs_quota_status();
-int func_accessctrl_ssh(), func_accessctrl_ftp(), func_accessctrl_web();
-int func_accessctrl_ssh_disable(),func_accessctrl_ssh_enable();
-int func_accessctrl_web_enable(), func_accessctrl_web_disable();
-int func_accessctrl_ftp_enable(), func_accessctrl_ftp_disable();
-int func_accessctrl_ssh_set(),func_accessctrl_ssh_set_port();
-int func_accessctrl_ssh_set_protocol(),func_accessctrl_ssh_set_listen_address();
-int func_accessctrl_ssh_list();
-int func_accessctrl_ssh_list_config(), func_accessctrl_ssh_list_allowedhosts();
-int func_accessctrl_ssh_add(), func_accessctrl_ssh_del();
-int func_accessctrl_ssh_add_allowedhost(),func_accessctrl_ssh_del_allowedhost();
-int func_accessctrl_ftp_set(),func_accessctrl_ftp_set_port();
-int func_accessctrl_web_set(),func_accessctrl_web_set_http_port();
-int func_accessctrl_web_set_https_port();
-int func_accessctrl_web_set_http_session();
-int func_system_reboot(), func_system_shutdown();
-int func_system_set(), func_system_set_motd();
-int func_nfs_share(), func_nfs_unshare();
-int func_nfs_enable(), func_nfs_disable();
-int func_nfs_share_list();
+/* Readline-invoked command callbacks. Every callback takes a NULL-
+ * terminated argument vector; callbacks that ignore their args still
+ * accept char ** for type compatibility with command_t.func. */
+int func_exit(char **);
+int func_accessctrl(char **), func_bp(char **), func_syshealth(char **);
+int func_config(char **), func_disk(char **);
+int func_fs(char **), func_help(char **), func_repl(char **);
+int func_cifs(char **), func_vtl(char **);
+int func_net(char **), func_nfs(char **), func_snapshot(char **);
+int func_system(char **), func_user(char **), func_log(char **);
+int func_log_list(char **), func_log_view(char **), func_log_watch(char **);
+int func_bp_create(char **), func_bp_delete(char **);
+int func_bp_rename(char **), func_bp_list(char **);
+int func_bp_quota(char **), func_bp_quota_set(char **);
+int func_fs_quota(char **), func_fs_quota_enable(char **);
+int func_fs_quota_disable(char **), func_fs_quota_status(char **);
+int func_accessctrl_ssh(char **), func_accessctrl_ftp(char **);
+int func_accessctrl_web(char **);
+int func_accessctrl_ssh_disable(char **), func_accessctrl_ssh_enable(char **);
+int func_accessctrl_web_enable(char **), func_accessctrl_web_disable(char **);
+int func_accessctrl_ftp_enable(char **), func_accessctrl_ftp_disable(char **);
+int func_accessctrl_ssh_set(char **), func_accessctrl_ssh_set_port(char **);
+int func_accessctrl_ssh_set_protocol(char **);
+int func_accessctrl_ssh_set_listen_address(char **);
+int func_accessctrl_ssh_list(char **);
+int func_accessctrl_ssh_list_config(char **);
+int func_accessctrl_ssh_list_allowedhosts(char **);
+int func_accessctrl_ssh_add(char **), func_accessctrl_ssh_del(char **);
+int func_accessctrl_ssh_add_allowedhost(char **);
+int func_accessctrl_ssh_del_allowedhost(char **);
+int func_accessctrl_ftp_set(char **), func_accessctrl_ftp_set_port(char **);
+int func_accessctrl_web_set(char **), func_accessctrl_web_set_http_port(char **);
+int func_accessctrl_web_set_https_port(char **);
+int func_accessctrl_web_set_http_session(char **);
+int func_system_reboot(char **), func_system_shutdown(char **);
+int func_system_set(char **), func_system_set_motd(char **);
+int func_nfs_share(char **), func_nfs_unshare(char **);
+int func_nfs_enable(char **), func_nfs_disable(char **);
+int func_nfs_share_list(char **);
 
-/* readline functions */
-void initialize_readline(char*);
-int execute_command(char*);
-char* algoclibase_generator();
-char* algoclisub_generator();
-char** algocli_completion();
-char* stripwhite();
-command_t *find_command(char*);
-command_t *find_last_command(char*);
-void cmd_ref();
-char* format_doc(int, const char *);
+/* Readline integration */
+void initialize_readline(const char *progname);
+int execute_command(char *line);
+char *algoclibase_generator(const char *text, int state);
+char *algoclisub_generator(const char *text, int state);
+char **algocli_completion(const char *text, int start, int end);
+char *stripwhite(char *string);
+command_t *find_command(const char *name);
+command_t *find_last_command(char *line);
+void cmd_ref(void);
+char *format_doc(int spcount, const char *text);
 
-int algoauth();
+int algoauth(void);
 void sigint_handler(int signal);
 
 #endif /* ALGOCLI_H */
